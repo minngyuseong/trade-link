@@ -1,0 +1,11 @@
+{
+  "name": "trade-link",
+  "private": true,
+  "packageManager": "pnpm@11.6.0",
+  "scripts": {
+    "dev:security-a": "pnpm --filter security-a-web dev",
+    "dev:security-b": "pnpm --filter security-b-web dev",
+    "build:web": "pnpm --filter './apps/*-web' build",
+    "lint:web": "pnpm --filter './apps/*-web' lint"
+  }
+}
