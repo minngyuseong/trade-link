@@ -1,4 +1,4 @@
-package com.tradelink.exchange;
+package com.tradelink.krx;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

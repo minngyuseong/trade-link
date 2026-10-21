@@ -1,0 +1,233 @@
+openapi: 3.0.1
+info:
+  title: KRX
+  description: >-
+    TradeLink 거래소 API. 개발 단계에서는 증권사 DB 연결 없이 Apidog의 샘플 JSON으로
+    A/B 증권사 요청을 각각 모의할 수 있습니다. 주문은 거래소 DB에 저장됩니다.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8083
+    description: 개발 환경
+paths:
+  /orders:
+    post:
+      operationId: acceptOrder
+      summary: 01. 주문 접수 및 매칭 시작
+      description: >-
+        주문을 exchange_order 테이블에 WAITING 상태로 저장하고 거래소 주문 ID를 반환합니다.
+        Apidog의 brokerAOrder, brokerBOrder 예제를 각각 보내면 A/B 증권사 요청을 모의할 수 있습니다.
+        증권사 DB에 직접 연결하지 않습니다. 매칭 워커는 저장된 주문을 나중에 처리합니다.
+      tags: [Orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRequest'
+            examples:
+              brokerAOrder:
+                summary: A증권에서 접수한 삼성전자 매수 주문 예시
+                value:
+                  userId: 1
+                  side: BUY
+                  quantity: 10
+                  price: 70000
+                  brokerCode: A
+                  brokerOrderId: 10001
+                  stockCode: '005930'
+              brokerBOrder:
+                summary: B증권에서 접수한 삼성전자 매도 주문 예시
+                value:
+                  userId: 1
+                  side: SELL
+                  quantity: 10
+                  price: 70000
+                  brokerCode: B
+                  brokerOrderId: 20001
+                  stockCode: '005930'
+      responses:
+        '200':
+          description: 주문 접수 완료. 동일 요청 재전송이면 기존 거래소 주문 ID와 현재 상태를 반환합니다.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAcceptedResponse'
+              example:
+                exchangeOrderId: 1
+                status: WAITING
+          links:
+            lookUpAcceptedOrder:
+              operationId: getOrder
+              description: 응답의 거래소 주문 ID로 주문 상태를 조회합니다.
+              parameters:
+                exchangeOrderId: '$response.body#/exchangeOrderId'
+        '400':
+          description: 필수 값이 누락됐거나 지원하지 않는 주문 값
+        '409':
+          description: 같은 증권사 주문 ID를 다른 주문 내용으로 재사용함
+  /orders/{exchangeOrderId}:
+    get:
+      operationId: getOrder
+      summary: 02. 주문 상태 및 체결 여부 조회
+      tags: [Orders]
+      parameters:
+        - name: exchangeOrderId
+          in: path
+          description: POST /orders 응답에서 받은 거래소 주문 ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 주문 상태 및 주문 상세
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderDetailsResponse'
+              example:
+                exchangeOrderId: 1
+                userId: 1
+                brokerCode: A
+                brokerOrderId: 10001
+                stockCode: '005930'
+                side: BUY
+                price: 70000
+                quantity: 10
+                status: WAITING
+                filled: false
+                createdAt: '2026-10-20T11:00:00'
+        '404':
+          description: 해당 거래소 주문 ID의 주문이 없어 조회할 수 없음
+  /trades/{id}:
+    get:
+      operationId: getTrade
+      summary: 03. 체결 가격·수량 등 상세 조회
+      tags: [Trades]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 체결 상세
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+        '404':
+          description: 체결 내역을 찾을 수 없음
+  /clearings/run:
+    post:
+      summary: 04. 증권사별 차액 계산 및 청산 실행
+      description: 매칭·청산 담당 기능. 세부 요청·응답 계약은 담당자와 합의가 필요합니다.
+      tags: [Clearing]
+      responses:
+        '200':
+          description: 청산 실행 결과
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+  /settlements:
+    post:
+      summary: 05. 차액을 예탁결제원에 전송
+      description: 예탁결제원 연동 기능. 세부 요청·응답 계약은 담당자와 합의가 필요합니다.
+      tags: [Settlement]
+      responses:
+        '200':
+          description: 정산 요청 결과
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+components:
+  schemas:
+    OrderRequest:
+      type: object
+      additionalProperties: false
+      required: [userId, side, quantity, price, brokerCode, brokerOrderId, stockCode]
+      properties:
+        userId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 증권사가 전달하는 고객 ID
+        side:
+          type: string
+          enum: [BUY, SELL]
+          description: 매수 또는 매도
+        quantity:
+          type: integer
+          minimum: 1
+          description: 주문 수량(주)
+        price:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 주문 가격(원)
+        brokerCode:
+          type: string
+          enum: [A, B]
+          description: 요청을 보낸 증권사 구분 코드
+        brokerOrderId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 해당 증권사 내부 주문 ID. brokerCode와 조합해 중복 접수를 막습니다.
+        stockCode:
+          type: string
+          enum: ['005930', '000660']
+          description: 삼성전자(005930), SK하이닉스(000660)
+    OrderAcceptedResponse:
+      description: 신규 접수는 WAITING, 동일 요청 재전송은 기존 주문의 현재 상태를 반환합니다.
+      type: object
+      required: [exchangeOrderId, status]
+      properties:
+        exchangeOrderId:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [WAITING, MATCHED, CANCELLED]
+    OrderDetailsResponse:
+      type: object
+      required: [exchangeOrderId, userId, brokerCode, brokerOrderId, stockCode, side, price, quantity, status, filled, createdAt]
+      properties:
+        exchangeOrderId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        brokerCode:
+          type: string
+          enum: [A, B]
+        brokerOrderId:
+          type: integer
+          format: int64
+        stockCode:
+          type: string
+          enum: ['005930', '000660']
+        side:
+          type: string
+          enum: [BUY, SELL]
+        price:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+        status:
+          type: string
+          enum: [WAITING, MATCHED, CANCELLED]
+        filled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
