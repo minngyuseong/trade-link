@@ -1,0 +1,23 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: exchange-server
+  datasource:
+    url: jdbc:mysql://localhost:3306/exchange_db?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: root
+    password: 1234
+  sql:
+    init:
+      mode: always
+
+external:
+  brokers:                        # 증권사 주소록: 코드 → 서버 주소
+    A: http://172.21.33.33:8081
+    B: http://172.21.33.33:8082
+  depository-url: http://172.21.33.9:8084
+
+matching:
+  worker:
+    enabled: true
