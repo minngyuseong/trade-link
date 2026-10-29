@@ -19,15 +19,32 @@ public class TradeCallbackService {
 
     // [조회 API] 단건 조회
     public OrderResponse findById(Long id) {
-        return jdbc.sql("SELECT * FROM orders WHERE id = :id").param("id", id)
-                .query(OrderResponse.class).optional()
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "없는 주문입니다."));
+        return jdbc.sql("""
+            SELECT o.*, CAST(o.id AS CHAR) AS order_id
+            FROM orders o
+            WHERE o.id = :id
+            """)
+                .param("id", id)
+                .query(OrderResponse.class)
+                .optional()
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "ORDER_NOT_FOUND",
+                        "없는 주문입니다."
+                ));
     }
 
     // [조회 API] 유저별 주문 목록 조회 (React 화면 연동용)
     public List<OrderResponse> findByUser(Long userId) {
-        return jdbc.sql("SELECT * FROM orders WHERE user_id = :u ORDER BY id DESC")
-                .param("u", userId).query(OrderResponse.class).list();
+        return jdbc.sql("""
+            SELECT o.*, CAST(o.id AS CHAR) AS order_id
+            FROM orders o
+            WHERE o.user_id = :u
+            ORDER BY o.id DESC
+            """)
+                .param("u", userId)
+                .query(OrderResponse.class)
+                .list();
     }
 
     // 3번 API: 거래소 체결 통보 처리
