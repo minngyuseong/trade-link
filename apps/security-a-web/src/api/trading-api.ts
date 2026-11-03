@@ -133,7 +133,11 @@ async function placeOrder(
       } satisfies OrderResult)
     mockOrders.set(request.idempotencyKey, result)
   } else {
-    const response = await http.post<OrderResult>('/api/orders', request, {
+    const response = await http.post<OrderResult>('/orders', {
+      ...request,
+      userId: Number(request.userId) || 1,
+      accountNo: '1001',
+    }, {
       headers: { 'Idempotency-Key': request.idempotencyKey },
     })
     result = response.data

@@ -9,6 +9,7 @@ export type Stock = {
 
 export type PlaceOrderRequest = {
   stockCode: string
+  side: 'BUY' | 'SELL'
   quantity: number
   price: number
   userId: string
