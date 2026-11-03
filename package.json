@@ -5,7 +5,7 @@
   "scripts": {
     "dev:security-a": "pnpm --filter security-a-web dev",
     "dev:security-b": "pnpm --filter security-b-web dev",
-    "build:web": "pnpm --filter './apps/*-web' build",
-    "lint:web": "pnpm --filter './apps/*-web' lint"
+    "build:web": "pnpm --filter @trade-link/trading-web-core typecheck && pnpm --filter security-a-web --filter security-b-web build",
+    "lint:web": "pnpm --filter @trade-link/trading-web-core lint && pnpm --filter security-a-web --filter security-b-web lint"
   }
 }
