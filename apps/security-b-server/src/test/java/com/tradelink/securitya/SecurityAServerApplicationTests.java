@@ -1,10 +1,10 @@
-package com.tradelink.securitya;
+package com.tradelink.securityb;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class SecurityBServerApplicationTests {
+class SecurityBServerLegacyApplicationTests {
 
 	@Test
 	void contextLoads() {

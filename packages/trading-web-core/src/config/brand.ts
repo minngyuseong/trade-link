@@ -5,7 +5,6 @@ export type BrokerConfig = Readonly<{
   apiBaseUrl: string
   userId: string
   accountNo: string
-  useMockApi: boolean
 }>
 
 export const brand = {} as BrokerConfig

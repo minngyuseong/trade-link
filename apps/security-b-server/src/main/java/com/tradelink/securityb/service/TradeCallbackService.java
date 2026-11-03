@@ -22,14 +22,22 @@ public class TradeCallbackService {
 
     // [조회 API] 단건 조회
     public OrderResponse findById(Long id) {
-        return jdbc.sql("SELECT * FROM orders WHERE id = :id").param("id", id)
+        return jdbc.sql("""
+                SELECT id, CAST(id AS CHAR) AS order_id, user_id, account_no, stock_code,
+                       side, price, quantity, status, exchange_order_id, trade_id
+                FROM orders WHERE id = :id
+                """).param("id", id)
                 .query(OrderResponse.class).optional()
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "ORDER_NOT_FOUND", "없는 주문입니다."));
     }
 
     // [조회 API] 유저별 주문 목록 조회 (React 화면 연동용)
     public List<OrderResponse> findByUser(Long userId) {
-        return jdbc.sql("SELECT * FROM orders WHERE user_id = :u ORDER BY id DESC")
+        return jdbc.sql("""
+                SELECT id, CAST(id AS CHAR) AS order_id, user_id, account_no, stock_code,
+                       side, price, quantity, status, exchange_order_id, trade_id
+                FROM orders WHERE user_id = :u ORDER BY id DESC
+                """)
                 .param("u", userId).query(OrderResponse.class).list();
     }
 
@@ -39,7 +47,7 @@ public class TradeCallbackService {
         int updated = jdbc.sql("""
                 UPDATE orders 
                 SET status = 'MATCHED', trade_id = :t 
-                WHERE id = :id AND status = 'PENDING'
+                WHERE id = :id AND status IN ('PENDING', 'ACCEPTED')
                 """)
                 .param("t", n.tradeId())
                 .param("id", n.brokerOrderId())

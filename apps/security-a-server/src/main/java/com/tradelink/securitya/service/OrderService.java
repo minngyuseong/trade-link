@@ -83,7 +83,12 @@ public class OrderService {
         }
 
         // 4. 거래소 주문번호 반영 및 주문 상태 ACCEPTED로 업데이트
-        jdbc.sql("UPDATE orders SET exchange_order_id = ?, status = 'ACCEPTED' WHERE id = ?")
+        jdbc.sql("""
+                UPDATE orders
+                SET exchange_order_id = ?,
+                    status = CASE WHEN status = 'PENDING' THEN 'ACCEPTED' ELSE status END
+                WHERE id = ?
+                """)
                 .param(accepted.exchangeOrderId())
                 .param(brokerOrderId)
                 .update();

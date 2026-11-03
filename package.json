@@ -7,5 +7,9 @@
     "dev:security-b": "pnpm --filter security-b-web dev",
     "build:web": "pnpm --filter @trade-link/trading-web-core typecheck && pnpm --filter security-a-web --filter security-b-web build",
     "lint:web": "pnpm --filter @trade-link/trading-web-core lint && pnpm --filter security-a-web --filter security-b-web lint"
+  },
+  "optionalDependencies": {
+    "@oxlint/binding-win32-x64-msvc": "1.88.0",
+    "@rolldown/binding-win32-x64-msvc": "1.2.14"
   }
 }

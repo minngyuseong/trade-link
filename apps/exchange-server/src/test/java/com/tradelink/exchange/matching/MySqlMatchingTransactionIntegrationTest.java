@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(classes = MySqlMatchingTransactionIntegrationTest.TestConfiguration.class)
-@TestPropertySource(properties = "spring.sql.init.mode=never")
+@TestPropertySource(properties = "spring.sql.init.mode=always")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class MySqlMatchingTransactionIntegrationTest {
 

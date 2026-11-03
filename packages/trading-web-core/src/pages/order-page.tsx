@@ -1,12 +1,11 @@
 import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, Delete, FlaskConical, WalletCards, WifiOff } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Delete, WalletCards } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
-import { SimulatedNetworkLossError, tradingApi } from '../api/trading-api'
+import { tradingApi } from '../api/trading-api'
 import { MobileShell } from '../components/mobile-shell'
 import { Button } from '../components/ui/button'
-import { Checkbox } from '../components/ui/checkbox'
 import { brand } from '../config/brand'
 
 const BUYING_POWER = 12_000_000
@@ -25,9 +24,7 @@ export function OrderPage() {
   })
   const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY')
   const [quantityText, setQuantityText] = useState('')
-  const [simulateLoss, setSimulateLoss] = useState(false)
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
-  const [lostResponse, setLostResponse] = useState(false)
 
   const quantity = Number(quantityText || 0)
   const availableStockQuantity = account.holdings.find(({ stock: holdingStock }) => holdingStock.code === stock.code)?.quantity ?? 0
@@ -37,25 +34,19 @@ export function OrderPage() {
 
   const orderMutation = useMutation({
     mutationFn: () =>
-      tradingApi.placeOrder(
-        {
-          stockCode: stock.code,
-          side: orderSide,
-          quantity,
-          price: stock.price,
-          userId: brand.userId,
-          idempotencyKey,
-        },
-        { simulateResponseLoss: simulateLoss },
-      ),
-    onSuccess: () => setLostResponse(false),
-    onError: (error) => setLostResponse(error instanceof SimulatedNetworkLossError),
+      tradingApi.placeOrder({
+        stockCode: stock.code,
+        side: orderSide,
+        quantity,
+        price: stock.price,
+        userId: brand.userId,
+        idempotencyKey,
+      }),
   })
 
   const resetOrderAttempt = () => {
     if (orderMutation.isSuccess || orderMutation.isError) {
       orderMutation.reset()
-      setLostResponse(false)
       setIdempotencyKey(crypto.randomUUID())
     }
   }
@@ -63,7 +54,6 @@ export function OrderPage() {
   const chooseOrderSide = (side: 'BUY' | 'SELL') => {
     if (side === orderSide) return
     orderMutation.reset()
-    setLostResponse(false)
     setIdempotencyKey(crypto.randomUUID())
     setQuantityText('')
     setOrderSide(side)
@@ -152,25 +142,6 @@ export function OrderPage() {
           </div>
         </section>
 
-        <section className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <label className="flex cursor-pointer items-start gap-3" htmlFor="simulate-network-loss">
-            <Checkbox
-              checked={simulateLoss}
-              className="mt-0.5 size-5 data-checked:border-amber-500 data-checked:bg-amber-500"
-              id="simulate-network-loss"
-              onCheckedChange={(checked) => setSimulateLoss(checked === true)}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-2 font-bold text-amber-950">
-                <WifiOff className="size-4" /> 강제로 네트워크 유실
-              </span>
-              <span className="mt-1 block text-sm leading-5 text-amber-800/80">
-                서버가 주문을 처리한 뒤 응답만 유실시켜 멱등 재시도를 연습합니다.
-              </span>
-            </span>
-          </label>
-        </section>
-
         {orderMutation.isSuccess && (
           <div className="mt-4 flex gap-3 rounded-2xl bg-emerald-50 p-4 text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
@@ -181,19 +152,7 @@ export function OrderPage() {
           </div>
         )}
 
-        {lostResponse && (
-          <div className="mt-4 flex gap-3 rounded-2xl bg-rose-50 p-4 text-rose-800" role="alert">
-            <FlaskConical className="mt-0.5 size-5 shrink-0" />
-            <div>
-              <p className="font-bold">응답이 유실됐어요</p>
-              <p className="mt-1 text-sm leading-5">
-                서버 처리 여부는 알 수 없습니다. 체크를 끈 뒤 같은 멱등성 키로 다시 보내보세요.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {orderMutation.isError && !lostResponse && (
+        {orderMutation.isError && (
           <div className="mt-4 rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700" role="alert">
             주문 요청에 실패했습니다. 잠시 후 다시 시도해주세요.
           </div>
@@ -246,11 +205,9 @@ export function OrderPage() {
         >
           {orderMutation.isPending
             ? '주문 전송 중...'
-            : lostResponse
-              ? '같은 주문 다시 보내기'
-              : quantity
-                ? `${formatWon(totalAmount)} ${orderSide === 'BUY' ? '구매하기' : '판매하기'}`
-                : orderSide === 'BUY' ? '구매하기' : '판매하기'}
+            : quantity
+              ? `${formatWon(totalAmount)} ${orderSide === 'BUY' ? '구매하기' : '판매하기'}`
+              : orderSide === 'BUY' ? '구매하기' : '판매하기'}
         </Button>
       </div>
     </MobileShell>

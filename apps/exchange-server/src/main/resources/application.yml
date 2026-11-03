@@ -14,9 +14,9 @@ spring:
 
 external:
   brokers:                        # 증권사 주소록: 코드 → 서버 주소
-    A: http://172.21.33.33:8081
-    B: http://172.21.33.33:8082
-  depository-url: http://172.21.33.9:8084
+    A: ${BROKER_A_URL:http://localhost:8081/api}
+    B: ${BROKER_B_URL:http://localhost:8082/api}
+  depository-url: ${DEPOSITORY_URL:http://localhost:8084}
 
 matching:
   worker:

@@ -7,5 +7,4 @@ export const brand = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8082',
   userId: import.meta.env.VITE_USER_ID ?? 'security-b-user',
   accountNo: import.meta.env.VITE_ACCOUNT_NO ?? '2001',
-  useMockApi: import.meta.env.VITE_USE_MOCK_API !== 'false',
 } as const satisfies BrokerConfig

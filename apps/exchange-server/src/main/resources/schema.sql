@@ -12,3 +12,16 @@ CREATE TABLE IF NOT EXISTS exchange_order (
     CONSTRAINT uk_exchange_order_broker_order UNIQUE (broker_code, broker_order_id),
     INDEX idx_exchange_order_book (stock_code, status, side, price, created_at)
 );
+
+CREATE TABLE IF NOT EXISTS trade (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    buy_order_id BIGINT NOT NULL,
+    sell_order_id BIGINT NOT NULL,
+    stock_code VARCHAR(10) NOT NULL,
+    price BIGINT NOT NULL,
+    quantity INT NOT NULL,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    UNIQUE KEY uk_trade_orders (buy_order_id, sell_order_id),
+    CONSTRAINT fk_trade_buy_order FOREIGN KEY (buy_order_id) REFERENCES exchange_order(id),
+    CONSTRAINT fk_trade_sell_order FOREIGN KEY (sell_order_id) REFERENCES exchange_order(id)
+);

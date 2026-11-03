@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class DepositoryService {
 
     private final JdbcClient jdbc;
-    private final BrokerNotifier brokerNotifier; // ⭐️ 증권사 통보 전용 컴포넌트 주입
 
     /**
      * 정산 (증권사 단위로 현금과 주식을 이동 후 증권사 A, B로 정산 통보)
@@ -77,8 +76,6 @@ public class DepositoryService {
         log.info("🎉 [예탁결제원] DVP 원장 정산 완료! tradeId={}, 총대금={}원, 수량={}주", r.tradeId(), amount, r.quantity());
 
         // 6. 증권사 A, B로 정산 완료 통보 전송!
-        brokerNotifier.notifySettled(r);
-
         return true;
     }
 

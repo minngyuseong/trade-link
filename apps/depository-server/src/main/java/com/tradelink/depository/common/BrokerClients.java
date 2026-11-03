@@ -15,19 +15,9 @@ public class BrokerClients {
 
     public BrokerClients(BrokerConfigProps props) {
         // 초현님 PC IP(172.21.33.33) 기본값 매핑
-        Map<String, String> brokerUrls = props.getBrokers();
-        if (brokerUrls == null || brokerUrls.isEmpty()) {
-            brokerUrls = new HashMap<>();
-            brokerUrls.put("a", "http://172.21.33.33:8081");
-            brokerUrls.put("b", "http://172.21.33.33:8082");
-        } else {
-            if (!brokerUrls.containsKey("a") || brokerUrls.get("a").contains("localhost")) {
-                brokerUrls.put("a", "http://172.21.33.33:8081");
-            }
-            if (!brokerUrls.containsKey("b") || brokerUrls.get("b").contains("localhost")) {
-                brokerUrls.put("b", "http://172.21.33.33:8082");
-            }
-        }
+        Map<String, String> brokerUrls = new HashMap<>(props.getBrokers());
+        brokerUrls.putIfAbsent("A", "http://localhost:8081/api");
+        brokerUrls.putIfAbsent("B", "http://localhost:8082/api");
 
         brokerUrls.forEach((code, url) -> {
             RestClient client = RestClient.builder().baseUrl(url).build();
