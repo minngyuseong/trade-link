@@ -1,11 +1,8 @@
 import { Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
-import { AccountSkeleton } from './components/account-skeleton'
 import { OrderSkeleton } from './components/order-skeleton'
 import { StockListSkeleton } from './components/stock-list-skeleton'
-import { AccountPage } from './pages/account-page'
-import { HoldingDetailPage } from './pages/holding-detail-page'
 import { OrderPage } from './pages/order-page'
 import { StockListPage } from './pages/stock-list-page'
 
@@ -26,24 +23,9 @@ export function TradingApp() {
             <OrderPage />
           </Suspense>
         }
-        path="/stocks/:stockCode/order"
+        path="/stocks/:stockCode"
       />
-      <Route
-        element={
-          <Suspense fallback={<AccountSkeleton />}>
-            <AccountPage />
-          </Suspense>
-        }
-        path="/account"
-      />
-      <Route
-        element={
-          <Suspense fallback={<AccountSkeleton />}>
-            <HoldingDetailPage />
-          </Suspense>
-        }
-        path="/account/holdings/:stockCode"
-      />
+      <Route element={<Navigate replace to="/" />} path="/account" />
       <Route element={<Navigate replace to="/" />} path="*" />
     </Routes>
   )

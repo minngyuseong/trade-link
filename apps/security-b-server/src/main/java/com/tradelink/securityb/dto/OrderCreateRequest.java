@@ -12,7 +12,7 @@ public record OrderCreateRequest(
     // 기본값 보정을 위한 생성자 추가
     public OrderCreateRequest {
         if (accountNo == null || accountNo.isBlank()) {
-            accountNo = "1001";
+            accountNo = "2001";
         }
         if (side == null || side.isBlank()) {
             side = "BUY";

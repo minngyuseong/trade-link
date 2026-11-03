@@ -38,6 +38,15 @@ public class TradeCallbackService {
                 .param("u", userId).query(OrderResponse.class).list();
     }
 
+    public List<OrderResponse> findByAccount(String accountNo) {
+        return jdbc.sql("""
+                SELECT id, CAST(id AS CHAR) AS order_id, user_id, account_no, stock_code,
+                       side, price, quantity, status, exchange_order_id, trade_id
+                FROM orders WHERE account_no = :accountNo ORDER BY id DESC
+                """)
+                .param("accountNo", accountNo).query(OrderResponse.class).list();
+    }
+
     // 3번 API: 거래소 체결 통보 처리
     @Transactional
     public void onTrade(TradeNotice n) {

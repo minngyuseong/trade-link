@@ -16,14 +16,20 @@ export type PlaceOrderRequest = {
   idempotencyKey: string
 }
 
+export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'MATCHED' | 'SETTLED'
+
 export type OrderResult = {
+  id: number
   orderId: string
-  idempotencyKey: string
+  userId: number
+  accountNo: string
   stockCode: string
+  side: 'BUY' | 'SELL'
   quantity: number
   price: number
-  totalAmount: number
-  status: 'ACCEPTED'
+  status: OrderStatus
+  exchangeOrderId: number | null
+  tradeId: number | null
 }
 
 export type Holding = {

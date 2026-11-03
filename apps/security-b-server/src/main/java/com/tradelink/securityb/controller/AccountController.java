@@ -30,7 +30,7 @@ public class AccountController {
 
         // 주입받은 기본 계좌의 보유 주식 목록 조회
         List<Map<String, Object>> rawHoldings = jdbcTemplate.queryForList(
-                "SELECT stock_code, quantity FROM holdings WHERE account_no = ?",
+                "SELECT stock_code, quantity FROM holdings WHERE account_no = ? AND quantity > 0",
                 defaultAccountNo
         );
 

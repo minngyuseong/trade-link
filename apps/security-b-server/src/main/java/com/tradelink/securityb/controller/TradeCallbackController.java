@@ -5,6 +5,7 @@ import com.tradelink.securityb.dto.OrderResponse;
 import com.tradelink.securityb.dto.SettlementNotice;
 import com.tradelink.securityb.dto.TradeNotice;
 import com.tradelink.securityb.service.TradeCallbackService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,6 +14,9 @@ import java.util.List;
 @RestController
 public class TradeCallbackController {
     private final TradeCallbackService service;
+
+    @Value("${default.account-no:2001}")
+    private String defaultAccountNo;
 
     public TradeCallbackController(TradeCallbackService service) {
         this.service = service;
@@ -26,6 +30,11 @@ public class TradeCallbackController {
     @GetMapping("/users/{userId}/orders")
     public List<OrderResponse> getUserOrders(@PathVariable Long userId) {
         return service.findByUser(userId);
+    }
+
+    @GetMapping("/account/orders")
+    public List<OrderResponse> getAccountOrders() {
+        return service.findByAccount(defaultAccountNo);
     }
 
     @PostMapping("/internal/trades")

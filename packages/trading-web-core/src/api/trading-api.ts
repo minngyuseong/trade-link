@@ -1,4 +1,5 @@
 import { http } from '../lib/http'
+import { getBrandConfig } from '../config/brand'
 import type { Account, Holding, OrderResult, PlaceOrderRequest, Stock } from '../types/trading'
 
 async function getStocks() {
@@ -22,13 +23,25 @@ async function getHolding(stockCode: string) {
 }
 
 async function placeOrder(request: PlaceOrderRequest) {
+  const brand = getBrandConfig()
   const response = await http.post<OrderResult>('/api/orders', {
     ...request,
     userId: Number(request.userId) || 1,
+    accountNo: brand.accountNo,
   }, {
     headers: { 'Idempotency-Key': request.idempotencyKey },
   })
   return response.data
 }
 
-export const tradingApi = { getStocks, getStock, getAccount, getHolding, placeOrder }
+async function getOrder(orderId: number) {
+  const { data } = await http.get<OrderResult>(`/api/orders/${orderId}`)
+  return data
+}
+
+async function getOrders() {
+  const { data } = await http.get<OrderResult[]>('/api/account/orders')
+  return data
+}
+
+export const tradingApi = { getStocks, getStock, getAccount, getHolding, placeOrder, getOrder, getOrders }

@@ -1,21 +1,50 @@
-import { useMutation, useSuspenseQuery } from '@tanstack/react-query'
-import { ArrowLeft, CheckCircle2, Delete, WalletCards } from 'lucide-react'
+import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { ArrowLeft, CheckCircle2, Delete } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 
 import { tradingApi } from '../api/trading-api'
 import { MobileShell } from '../components/mobile-shell'
 import { Button } from '../components/ui/button'
 import { brand } from '../config/brand'
+import type { OrderResult, OrderStatus } from '../types/trading'
 
 const BUYING_POWER = 12_000_000
 type OrderSide = 'BUY' | 'SELL'
+type DetailTab = 'order' | 'holding'
+type HistoryFilter = 'ALL' | OrderSide
 
 const formatNumber = (value: number) => new Intl.NumberFormat('ko-KR').format(value)
 const formatWon = (value: number) => `${formatNumber(value)}원`
 
+const statusLabel: Record<OrderStatus, string> = {
+  PENDING: '접수 대기',
+  ACCEPTED: '주문 접수',
+  MATCHED: '체결',
+  SETTLED: '정산 완료',
+}
+
+const statusClass: Record<OrderStatus, string> = {
+  PENDING: 'bg-slate-100 text-slate-600',
+  ACCEPTED: 'bg-amber-50 text-amber-700',
+  MATCHED: 'bg-violet-50 text-violet-700',
+  SETTLED: 'bg-emerald-50 text-emerald-700',
+}
+
+const delay = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+
+async function waitForSettlement(orderId: number) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const order = await tradingApi.getOrder(orderId)
+    if (order.status === 'SETTLED') return order
+    await delay(500)
+  }
+  throw new Error('주문이 60초 안에 정산되지 않았습니다.')
+}
+
 export function OrderPage() {
   const { stockCode = '' } = useParams()
+  const queryClient = useQueryClient()
   const { data: stock } = useSuspenseQuery({
     queryKey: ['stock', stockCode],
     queryFn: () => tradingApi.getStock(stockCode),
@@ -23,27 +52,52 @@ export function OrderPage() {
   const { data: account } = useSuspenseQuery({
     queryKey: ['account'],
     queryFn: tradingApi.getAccount,
+    refetchOnMount: 'always',
   })
+  const { data: orders } = useSuspenseQuery({
+    queryKey: ['orders'],
+    queryFn: tradingApi.getOrders,
+    refetchOnMount: 'always',
+  })
+  const [tab, setTab] = useState<DetailTab>('order')
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('ALL')
   const [quantityText, setQuantityText] = useState('')
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
 
   const quantity = Number(quantityText || 0)
-  const availableStockQuantity = account.holdings.find(({ stock: holdingStock }) => holdingStock.code === stock.code)?.quantity ?? 0
+  const holding = account.holdings.find(({ stock: holdingStock }) => holdingStock.code === stock.code)
+  const availableStockQuantity = holding?.quantity ?? 0
   const maxBuyQuantity = Math.floor(BUYING_POWER / stock.price)
   const totalAmount = quantity * stock.price
   const canBuy = quantity > 0 && quantity <= maxBuyQuantity
   const canSell = quantity > 0 && quantity <= availableStockQuantity
+  const stockOrders = orders.filter((order) =>
+    order.stockCode === stock.code && (historyFilter === 'ALL' || order.side === historyFilter),
+  )
 
   const orderMutation = useMutation({
-    mutationFn: (side: OrderSide) =>
-      tradingApi.placeOrder({
+    mutationFn: async (side: OrderSide) => {
+      const accepted = await tradingApi.placeOrder({
         stockCode: stock.code,
         side,
         quantity,
         price: stock.price,
         userId: brand.userId,
         idempotencyKey,
-      }),
+      })
+      return waitForSettlement(accepted.id)
+    },
+    onSuccess: async (settledOrder) => {
+      queryClient.setQueryData<OrderResult[]>(['orders'], (current = []) => [
+        settledOrder,
+        ...current.filter((order) => order.id !== settledOrder.id),
+      ])
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['account'] }),
+        queryClient.invalidateQueries({ queryKey: ['holding', stock.code] }),
+        queryClient.invalidateQueries({ queryKey: ['orders'] }),
+      ])
+    },
   })
 
   const resetOrderAttempt = () => {
@@ -73,31 +127,48 @@ export function OrderPage() {
 
   const keypad = useMemo(() => ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'], [])
 
+  if (!holding || holding.quantity <= 0) {
+    return <Navigate replace to="/" />
+  }
+
   return (
     <MobileShell>
-      <header className="sticky top-0 z-20 grid h-20 grid-cols-[48px_1fr_48px] items-center bg-white/90 px-4 backdrop-blur-xl">
-        <Link
-          aria-label="종목 목록으로 돌아가기"
-          className="grid size-11 place-items-center rounded-full transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
-          to="/"
-        >
-          <ArrowLeft className="size-6" />
-        </Link>
-        <div className="text-center">
-          <p className="text-sm font-medium text-slate-500">{stock.name}</p>
-          <p className="mt-0.5 text-lg font-bold text-red-500">{formatWon(stock.price)}</p>
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-xl">
+        <div className="grid h-20 grid-cols-[48px_1fr_48px] items-center px-4">
+          <Link
+            aria-label="보유 종목 목록으로 돌아가기"
+            className="grid size-11 place-items-center rounded-full transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)]"
+            to="/"
+          >
+            <ArrowLeft className="size-6" />
+          </Link>
+          <div className="text-center">
+            <p className="text-base font-bold text-slate-950">{stock.name}</p>
+            <p className="mt-0.5 text-sm font-semibold text-red-500">{formatWon(stock.price)}</p>
+          </div>
+          <span className="mx-auto grid size-8 place-items-center rounded-full bg-[var(--brand)] text-xs font-bold text-white">
+            {brand.shortName}
+          </span>
         </div>
-        <WalletCards className="mx-auto size-6 text-slate-400" />
+        <div className="grid grid-cols-2 border-b border-slate-100 px-5">
+          {([['order', '주문'], ['holding', '내 주식']] as const).map(([value, label]) => (
+            <button
+              className={`relative h-14 text-base font-bold transition-colors ${tab === value ? 'text-slate-950' : 'text-slate-400'}`}
+              key={value}
+              onClick={() => setTab(value)}
+              type="button"
+            >
+              {label}
+              {tab === value && <span className="absolute inset-x-5 bottom-0 h-0.5 rounded-full bg-slate-950" />}
+            </button>
+          ))}
+        </div>
       </header>
 
-      <main className="px-5 pb-36 pt-4">
-        <div className="flex items-center gap-2 px-1 text-lg font-bold text-slate-900">
-          <span className="grid size-7 place-items-center rounded-full bg-[var(--brand)] text-sm text-white">{brand.shortName}</span>
-          간이계좌
-          <span className="ml-auto text-sm font-medium text-slate-400">주문 연습</span>
-        </div>
-
-        <section className="mt-5 rounded-[28px] bg-slate-100 px-6 py-6">
+      {tab === 'order' ? (
+        <>
+      <main className="px-5 pb-36 pt-5">
+        <section className="rounded-[28px] bg-slate-100 px-6 py-6">
           <div className="flex items-center gap-3 text-lg">
             <span className="font-bold text-slate-900">주문 가격</span>
             <span className="text-slate-300">|</span>
@@ -123,15 +194,15 @@ export function OrderPage() {
           <div className="mt-4 flex gap-3 rounded-2xl bg-emerald-50 p-4 text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
             <div>
-              <p className="font-bold">주문이 접수됐어요</p>
-              <p className="mt-1 text-sm">주문번호 {orderMutation.data.orderId.slice(0, 8)}</p>
+              <p className="font-bold">주문 체결과 정산이 완료됐어요</p>
+              <p className="mt-1 text-sm">주문번호 {orderMutation.data.orderId}</p>
             </div>
           </div>
         )}
 
         {orderMutation.isError && (
           <div className="mt-4 rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-700" role="alert">
-            주문 요청에 실패했습니다. 잠시 후 다시 시도해주세요.
+            주문 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.
           </div>
         )}
 
@@ -168,10 +239,6 @@ export function OrderPage() {
             <Delete className="size-7" />
           </Button>
         </div>
-
-        <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-center font-mono text-[11px] text-slate-400">
-          idempotency-key · {idempotencyKey}
-        </div>
       </main>
 
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto grid w-full max-w-[520px] grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
@@ -180,16 +247,77 @@ export function OrderPage() {
           disabled={!canSell || orderMutation.isPending || orderMutation.isSuccess}
           onClick={() => orderMutation.mutate('SELL')}
         >
-          {orderMutation.isPending && orderMutation.variables === 'SELL' ? '판매 중...' : '판매하기'}
+          {orderMutation.isPending && orderMutation.variables === 'SELL' ? '판매 처리 중...' : '판매하기'}
         </Button>
         <Button
           className="h-16 rounded-2xl bg-red-500 text-lg font-bold text-white shadow-lg shadow-red-500/15 hover:bg-red-500 hover:brightness-95"
           disabled={!canBuy || orderMutation.isPending || orderMutation.isSuccess}
           onClick={() => orderMutation.mutate('BUY')}
         >
-          {orderMutation.isPending && orderMutation.variables === 'BUY' ? '구매 중...' : '구매하기'}
+          {orderMutation.isPending && orderMutation.variables === 'BUY' ? '구매 처리 중...' : '구매하기'}
         </Button>
       </div>
+        </>
+      ) : (
+        <main className="px-5 pb-12 pt-6">
+          <section className="grid grid-cols-2 gap-3">
+            <div className="rounded-[24px] bg-slate-100 px-5 py-5">
+              <p className="text-sm font-semibold text-slate-500">보유수량</p>
+              <p className="mt-3 text-2xl font-bold text-slate-950">{formatNumber(availableStockQuantity)}주</p>
+            </div>
+            <div className="rounded-[24px] bg-slate-100 px-5 py-5">
+              <p className="text-sm font-semibold text-slate-500">총평가금액</p>
+              <p className="mt-3 text-2xl font-bold text-slate-950">{formatWon(holding?.evaluationAmount ?? 0)}</p>
+            </div>
+          </section>
+
+          <section className="mt-10" aria-labelledby="order-history-title">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-950" id="order-history-title">주문내역</h2>
+              <span className="text-sm font-semibold text-slate-400">{stockOrders.length}건</span>
+            </div>
+            <div className="mt-4 flex gap-2">
+              {([['ALL', '전체'], ['BUY', '구매'], ['SELL', '판매']] as const).map(([value, label]) => (
+                <button
+                  className={`rounded-full px-4 py-2 text-sm font-bold ${historyFilter === value ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-500'}`}
+                  key={value}
+                  onClick={() => setHistoryFilter(value)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-5 divide-y divide-slate-100">
+              {stockOrders.length === 0 ? (
+                <div className="py-16 text-center text-sm font-medium text-slate-400">아직 주문내역이 없습니다.</div>
+              ) : stockOrders.map((order) => (
+                <article className="py-5" key={order.id}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-base font-bold ${order.side === 'BUY' ? 'text-red-500' : 'text-blue-600'}`}>
+                        {order.side === 'BUY' ? '구매' : '판매'}
+                      </span>
+                      <span className="text-sm text-slate-400">주문 #{order.orderId}</span>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${statusClass[order.status]}`}>
+                      {statusLabel[order.status]}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex items-end justify-between">
+                    <div>
+                      <p className="text-lg font-bold text-slate-950">{formatNumber(order.quantity)}주</p>
+                      <p className="mt-1 text-sm text-slate-400">주당 {formatWon(order.price)}</p>
+                    </div>
+                    <p className="text-base font-bold text-slate-700">{formatWon(order.price * order.quantity)}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        </main>
+      )}
     </MobileShell>
   )
 }
