@@ -10,6 +10,8 @@ import { Checkbox } from '../components/ui/checkbox'
 import { brand } from '../config/brand'
 
 const BUYING_POWER = 12_000_000
+type OrderSide = 'BUY' | 'SELL'
+
 const formatNumber = (value: number) => new Intl.NumberFormat('ko-KR').format(value)
 const formatWon = (value: number) => `${formatNumber(value)}원`
 
@@ -23,7 +25,6 @@ export function OrderPage() {
     queryKey: ['account'],
     queryFn: tradingApi.getAccount,
   })
-  const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY')
   const [quantityText, setQuantityText] = useState('')
   const [simulateLoss, setSimulateLoss] = useState(false)
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
@@ -31,16 +32,17 @@ export function OrderPage() {
 
   const quantity = Number(quantityText || 0)
   const availableStockQuantity = account.holdings.find(({ stock: holdingStock }) => holdingStock.code === stock.code)?.quantity ?? 0
-  const maxQuantity = orderSide === 'BUY' ? Math.floor(BUYING_POWER / stock.price) : availableStockQuantity
+  const maxBuyQuantity = Math.floor(BUYING_POWER / stock.price)
   const totalAmount = quantity * stock.price
-  const canOrder = quantity > 0 && quantity <= maxQuantity
+  const canBuy = quantity > 0 && quantity <= maxBuyQuantity
+  const canSell = quantity > 0 && quantity <= availableStockQuantity
 
   const orderMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (side: OrderSide) =>
       tradingApi.placeOrder(
         {
           stockCode: stock.code,
-          side: orderSide,
+          side,
           quantity,
           price: stock.price,
           userId: brand.userId,
@@ -60,15 +62,6 @@ export function OrderPage() {
     }
   }
 
-  const chooseOrderSide = (side: 'BUY' | 'SELL') => {
-    if (side === orderSide) return
-    orderMutation.reset()
-    setLostResponse(false)
-    setIdempotencyKey(crypto.randomUUID())
-    setQuantityText('')
-    setOrderSide(side)
-  }
-
   const appendDigit = (digit: string) => {
     resetOrderAttempt()
     setQuantityText((current) => {
@@ -84,7 +77,7 @@ export function OrderPage() {
 
   const chooseRatio = (ratio: number) => {
     resetOrderAttempt()
-    setQuantityText(String(Math.max(1, Math.floor(maxQuantity * ratio))))
+    setQuantityText(String(Math.max(1, Math.floor(maxBuyQuantity * ratio))))
   }
 
   const keypad = useMemo(() => ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0'], [])
@@ -113,26 +106,9 @@ export function OrderPage() {
           <span className="ml-auto text-sm font-medium text-slate-400">주문 연습</span>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 rounded-2xl bg-slate-100 p-1">
-          <button
-            className={`rounded-xl py-3 text-sm font-bold transition-all ${orderSide === 'BUY' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500'}`}
-            onClick={() => chooseOrderSide('BUY')}
-            type="button"
-          >
-            구매 (매수)
-          </button>
-          <button
-            className={`rounded-xl py-3 text-sm font-bold transition-all ${orderSide === 'SELL' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500'}`}
-            onClick={() => chooseOrderSide('SELL')}
-            type="button"
-          >
-            판매 (매도)
-          </button>
-        </div>
-
         <section className="mt-5 rounded-[28px] bg-slate-100 px-6 py-6">
           <div className="flex items-center gap-3 text-lg">
-            <span className="font-bold text-slate-900">{orderSide === 'BUY' ? '구매할 가격' : '판매할 가격'}</span>
+            <span className="font-bold text-slate-900">주문 가격</span>
             <span className="text-slate-300">|</span>
             <span className="font-medium text-slate-400">현재가</span>
           </div>
@@ -142,11 +118,11 @@ export function OrderPage() {
         <section className="mt-3 rounded-[28px] bg-slate-100 px-6 py-6">
           <p className="text-lg font-bold text-slate-900">수량</p>
           <p className={`mt-6 min-h-12 text-[2rem] font-bold tracking-[-0.04em] ${quantity ? 'text-slate-950' : 'text-slate-300'}`}>
-            {quantity ? `${formatNumber(quantity)}주` : `몇 주 ${orderSide === 'BUY' ? '구매' : '판매'}할까요?`}
+            {quantity ? `${formatNumber(quantity)}주` : '몇 주 주문할까요?'}
           </p>
           <div className="mt-4 flex items-center justify-between text-sm font-medium text-slate-400">
             <span>
-              {orderSide === 'BUY' ? `구매가능 ${formatWon(BUYING_POWER)}` : `보유수량 ${formatNumber(availableStockQuantity)}주`} · 최대 {maxQuantity}주
+              구매 최대 {maxBuyQuantity}주 · 판매 최대 {formatNumber(availableStockQuantity)}주
             </span>
             <span>{quantity ? formatWon(totalAmount) : '0원'}</span>
           </div>
@@ -238,19 +214,38 @@ export function OrderPage() {
         </div>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[520px] border-t border-slate-100 bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
+      <div className="fixed inset-x-0 bottom-0 z-20 mx-auto grid w-full max-w-[520px] grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
         <Button
-          className={`h-16 w-full rounded-2xl text-lg font-bold text-white shadow-lg hover:brightness-95 ${orderSide === 'BUY' ? 'bg-[var(--brand)] shadow-blue-500/15 hover:bg-[var(--brand)]' : 'bg-blue-600 shadow-blue-600/15 hover:bg-blue-600'}`}
-          disabled={!canOrder || orderMutation.isPending || orderMutation.isSuccess}
-          onClick={() => orderMutation.mutate()}
+          className="h-16 rounded-2xl bg-blue-600 text-lg font-bold text-white shadow-lg shadow-blue-600/15 hover:bg-blue-600 hover:brightness-95"
+          disabled={
+            !canSell ||
+            orderMutation.isPending ||
+            orderMutation.isSuccess ||
+            (lostResponse && orderMutation.variables !== 'SELL')
+          }
+          onClick={() => orderMutation.mutate('SELL')}
         >
-          {orderMutation.isPending
-            ? '주문 전송 중...'
-            : lostResponse
-              ? '같은 주문 다시 보내기'
-              : quantity
-                ? `${formatWon(totalAmount)} ${orderSide === 'BUY' ? '구매하기' : '판매하기'}`
-                : orderSide === 'BUY' ? '구매하기' : '판매하기'}
+          {orderMutation.isPending && orderMutation.variables === 'SELL'
+            ? '판매 중...'
+            : lostResponse && orderMutation.variables === 'SELL'
+              ? '판매 다시 보내기'
+              : '판매하기'}
+        </Button>
+        <Button
+          className="h-16 rounded-2xl bg-red-500 text-lg font-bold text-white shadow-lg shadow-red-500/15 hover:bg-red-500 hover:brightness-95"
+          disabled={
+            !canBuy ||
+            orderMutation.isPending ||
+            orderMutation.isSuccess ||
+            (lostResponse && orderMutation.variables !== 'BUY')
+          }
+          onClick={() => orderMutation.mutate('BUY')}
+        >
+          {orderMutation.isPending && orderMutation.variables === 'BUY'
+            ? '구매 중...'
+            : lostResponse && orderMutation.variables === 'BUY'
+              ? '구매 다시 보내기'
+              : '구매하기'}
         </Button>
       </div>
     </MobileShell>
