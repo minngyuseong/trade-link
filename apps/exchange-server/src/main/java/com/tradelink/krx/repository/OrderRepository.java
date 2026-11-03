@@ -79,6 +79,16 @@ public class OrderRepository {
                 """, (resultSet, rowNumber) -> mapOrder(resultSet));
     }
 
+    public List<OrderDetailsResponse> findRecentOrders() {
+        return jdbcTemplate.query("""
+                SELECT id, user_id, broker_code, broker_order_id, stock_code,
+                       side, price, quantity, status, created_at
+                FROM exchange_order
+                ORDER BY created_at DESC, id DESC
+                LIMIT 100
+                """, (resultSet, rowNumber) -> mapOrder(resultSet));
+    }
+
     public List<OrderDetailsResponse> lockWaitingOrders(long firstOrderId, long secondOrderId) {
         long lowerOrderId = Math.min(firstOrderId, secondOrderId);
         long higherOrderId = Math.max(firstOrderId, secondOrderId);
