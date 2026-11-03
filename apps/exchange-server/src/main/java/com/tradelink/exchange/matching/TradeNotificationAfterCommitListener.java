@@ -39,7 +39,7 @@ public class TradeNotificationAfterCommitListener {
 			return;
 		}
 
-		ksdClient.requestSettlement(new SettlementRequest(
+		SettlementRequest settlementRequest = new SettlementRequest(
 				String.valueOf(event.tradeId()),
 				event.stockCode(),
 				event.price(),
@@ -48,6 +48,9 @@ public class TradeNotificationAfterCommitListener {
 				String.valueOf(event.buyBrokerOrderId()),
 				event.sellBrokerCode(),
 				String.valueOf(event.sellBrokerOrderId())
-		));
+		);
+		boolean settlementRequested = ksdClient.requestSettlement(settlementRequest).isPresent();
+		log.info("Trade post-processing completed: tradeId={}, buyerNotified={}, sellerNotified={}, settlementRequested={}",
+				event.tradeId(), buyerNotified, sellerNotified, settlementRequested);
 	}
 }

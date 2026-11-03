@@ -2,6 +2,11 @@ package com.tradelink.depository.service;
 
 import com.tradelink.depository.common.ApiException;
 import com.tradelink.depository.dto.DepositoryDto.SettlementRequest;
+import com.tradelink.depository.dto.DepositoryDto.BrokerCash;
+import com.tradelink.depository.dto.DepositoryDto.BrokerStock;
+import com.tradelink.depository.dto.DepositoryDto.LedgerSnapshot;
+import com.tradelink.depository.dto.DepositoryDto.SettlementHistory;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -73,10 +78,74 @@ public class DepositoryService {
         jdbc.sql("INSERT INTO settlement(trade_id, status) VALUES (:t, 'SETTLED')")
                 .param("t", r.tradeId()).update();
 
+        jdbc.sql("""
+                INSERT INTO settlement_audit(
+                    trade_id, stock_code, price, quantity,
+                    buy_broker_code, buy_broker_order_id,
+                    sell_broker_code, sell_broker_order_id, status
+                ) VALUES (:tradeId, :stockCode, :price, :quantity,
+                          :buyBroker, :buyOrderId, :sellBroker, :sellOrderId, 'SETTLED')
+                """)
+                .param("tradeId", r.tradeId())
+                .param("stockCode", r.stockCode())
+                .param("price", r.price())
+                .param("quantity", r.quantity())
+                .param("buyBroker", r.buyBrokerCode())
+                .param("buyOrderId", r.buyBrokerOrderId())
+                .param("sellBroker", r.sellBrokerCode())
+                .param("sellOrderId", r.sellBrokerOrderId())
+                .update();
+
         log.info("🎉 [예탁결제원] DVP 원장 정산 완료! tradeId={}, 총대금={}원, 수량={}주", r.tradeId(), amount, r.quantity());
 
         // 6. 증권사 A, B로 정산 완료 통보 전송!
         return true;
+    }
+
+    @Transactional(readOnly = true)
+    public List<SettlementHistory> settlementHistory() {
+        return jdbc.sql("""
+                SELECT trade_id, stock_code, price, quantity,
+                       buy_broker_code, buy_broker_order_id,
+                       sell_broker_code, sell_broker_order_id,
+                       status, settled_at
+                FROM settlement_audit
+                ORDER BY settled_at DESC, trade_id DESC
+                LIMIT 100
+                """)
+                .query((rs, rowNum) -> new SettlementHistory(
+                        rs.getLong("trade_id"),
+                        rs.getString("stock_code"),
+                        rs.getLong("price"),
+                        rs.getInt("quantity"),
+                        rs.getString("buy_broker_code"),
+                        rs.getLong("buy_broker_order_id"),
+                        rs.getString("sell_broker_code"),
+                        rs.getLong("sell_broker_order_id"),
+                        rs.getString("status"),
+                        rs.getTimestamp("settled_at").toLocalDateTime()
+                )).list();
+    }
+
+    @Transactional(readOnly = true)
+    public LedgerSnapshot ledgerSnapshot() {
+        List<BrokerCash> cash = jdbc.sql("""
+                SELECT broker_code, amount FROM broker_cash ORDER BY broker_code
+                """)
+                .query((rs, rowNum) -> new BrokerCash(
+                        rs.getString("broker_code"), rs.getLong("amount")))
+                .list();
+        List<BrokerStock> stocks = jdbc.sql("""
+                SELECT broker_code, stock_code, quantity
+                FROM broker_stock
+                ORDER BY broker_code, stock_code
+                """)
+                .query((rs, rowNum) -> new BrokerStock(
+                        rs.getString("broker_code"),
+                        rs.getString("stock_code"),
+                        rs.getInt("quantity")))
+                .list();
+        return new LedgerSnapshot(cash, stocks);
     }
 
     private long getCash(String brokerCode) {

@@ -5,8 +5,10 @@
   "scripts": {
     "dev:security-a": "pnpm --filter security-a-web dev",
     "dev:security-b": "pnpm --filter security-b-web dev",
-    "build:web": "pnpm --filter @trade-link/trading-web-core typecheck && pnpm --filter security-a-web --filter security-b-web build",
-    "lint:web": "pnpm --filter @trade-link/trading-web-core lint && pnpm --filter security-a-web --filter security-b-web lint"
+    "dev:exchange": "pnpm --filter exchange-web dev",
+    "dev:depository": "pnpm --filter depository-web dev",
+    "build:web": "pnpm --filter @trade-link/trading-web-core typecheck && pnpm --filter @trade-link/operations-web-core typecheck && pnpm --filter security-a-web --filter security-b-web --filter exchange-web --filter depository-web build",
+    "lint:web": "pnpm --filter @trade-link/trading-web-core lint && pnpm --filter @trade-link/operations-web-core lint && pnpm --filter security-a-web --filter security-b-web --filter exchange-web --filter depository-web lint"
   },
   "optionalDependencies": {
     "@oxlint/binding-win32-x64-msvc": "1.88.0",

@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS trade (
     quantity INT NOT NULL,
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     UNIQUE KEY uk_trade_orders (buy_order_id, sell_order_id),
+    INDEX idx_trade_created_at (created_at),
+    INDEX idx_trade_stock_code (stock_code),
     CONSTRAINT fk_trade_buy_order FOREIGN KEY (buy_order_id) REFERENCES exchange_order(id),
     CONSTRAINT fk_trade_sell_order FOREIGN KEY (sell_order_id) REFERENCES exchange_order(id)
 );

@@ -27,4 +27,26 @@ public class DepositoryDto {
             long price,
             int quantity
     ) {}
+
+    public record SettlementHistory(
+            Long tradeId,
+            String stockCode,
+            long price,
+            int quantity,
+            String buyBrokerCode,
+            Long buyBrokerOrderId,
+            String sellBrokerCode,
+            Long sellBrokerOrderId,
+            String status,
+            java.time.LocalDateTime settledAt
+    ) {}
+
+    public record BrokerCash(String brokerCode, long amount) {}
+
+    public record BrokerStock(String brokerCode, String stockCode, int quantity) {}
+
+    public record LedgerSnapshot(
+            java.util.List<BrokerCash> cash,
+            java.util.List<BrokerStock> stocks
+    ) {}
 }
