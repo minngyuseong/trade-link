@@ -37,12 +37,12 @@ class MatchingTransactionServiceTest {
 		MatchResult candidate = candidate();
 		when(orderRepository.lockWaitingOrders(1, 2)).thenReturn(waitingPair(70_000, 69_000));
 		when(tradeRepository.insert(candidate, "005930")).thenReturn(99L);
-		when(orderRepository.markMatchedIfWaiting(1, 2)).thenReturn(2);
 
 		assertThat(service.execute(candidate)).isEqualTo(99L);
 
 		verify(tradeRepository).insert(candidate, "005930");
-		verify(orderRepository).markMatchedIfWaiting(1, 2);
+		verify(orderRepository).markMatchedIfFilled(1);
+		verify(orderRepository).markMatchedIfFilled(2);
 		verify(eventPublisher).publishEvent(any(TradeMatchedEvent.class));
 	}
 
@@ -77,20 +77,7 @@ class MatchingTransactionServiceTest {
 		assertThatThrownBy(() -> service.execute(candidate()))
 				.hasMessage("trade insert failed");
 
-		verify(orderRepository, never()).markMatchedIfWaiting(1, 2);
-		verify(eventPublisher, never()).publishEvent(any());
-	}
-
-	@Test
-	void rejectsPartialStatusUpdateSoTransactionCanRollBack() {
-		when(orderRepository.lockWaitingOrders(1, 2)).thenReturn(waitingPair(70_000, 69_000));
-		when(tradeRepository.insert(candidate(), "005930")).thenReturn(99L);
-		when(orderRepository.markMatchedIfWaiting(1, 2)).thenReturn(1);
-
-		assertThatThrownBy(() -> service.execute(candidate()))
-				.isInstanceOf(IllegalStateException.class)
-				.hasMessageContaining("two WAITING orders");
-
+		verify(orderRepository, never()).markMatchedIfFilled(org.mockito.ArgumentMatchers.anyLong());
 		verify(eventPublisher, never()).publishEvent(any());
 	}
 
@@ -101,7 +88,6 @@ class MatchingTransactionServiceTest {
 				.thenReturn(waitingPair(70_000, 69_000))
 				.thenReturn(List.of());
 		when(tradeRepository.insert(candidate, "005930")).thenReturn(99L);
-		when(orderRepository.markMatchedIfWaiting(1, 2)).thenReturn(2);
 
 		assertThat(service.execute(candidate)).isEqualTo(99L);
 		assertThatThrownBy(() -> service.execute(candidate))
@@ -109,7 +95,8 @@ class MatchingTransactionServiceTest {
 				.hasMessageContaining("WAITING");
 
 		verify(tradeRepository, times(1)).insert(candidate, "005930");
-		verify(orderRepository, times(1)).markMatchedIfWaiting(1, 2);
+		verify(orderRepository, times(1)).markMatchedIfFilled(1);
+		verify(orderRepository, times(1)).markMatchedIfFilled(2);
 		verify(eventPublisher, times(1)).publishEvent(any(TradeMatchedEvent.class));
 	}
 

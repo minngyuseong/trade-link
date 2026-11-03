@@ -23,10 +23,6 @@ public class MatchingEngine {
 		if (incomingOrder.side() == waitingOrder.side()) {
 			return false;
 		}
-		if (incomingOrder.quantity() != waitingOrder.quantity()) {
-			return false;
-		}
-
 		MatchingOrder buyOrder = incomingOrder.side() == OrderSide.BUY ? incomingOrder : waitingOrder;
 		MatchingOrder sellOrder = incomingOrder.side() == OrderSide.SELL ? incomingOrder : waitingOrder;
 		return buyOrder.price().compareTo(sellOrder.price()) >= 0;
@@ -51,7 +47,7 @@ public class MatchingEngine {
 				buyOrder.exchangeOrderId(),
 				sellOrder.exchangeOrderId(),
 				waitingOrder.price(),
-				incomingOrder.quantity()
+				Math.min(incomingOrder.quantity(), waitingOrder.quantity())
 		);
 	}
 }

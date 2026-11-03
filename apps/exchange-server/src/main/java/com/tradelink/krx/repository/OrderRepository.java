@@ -50,7 +50,9 @@ public class OrderRepository {
     public OrderDetailsResponse findByExchangeOrderId(long exchangeOrderId) {
         List<OrderDetailsResponse> orders = jdbcTemplate.query("""
                 SELECT id, user_id, broker_code, broker_order_id, stock_code,
-                       side, price, quantity, status, created_at
+                       side, price, quantity, quantity - COALESCE((SELECT SUM(t.quantity) FROM trade t
+                           WHERE t.buy_order_id = exchange_order.id OR t.sell_order_id = exchange_order.id), 0)
+                           AS remaining_quantity, status, created_at
                 FROM exchange_order
                 WHERE id = ?
                 """, (resultSet, rowNumber) -> mapOrder(resultSet), exchangeOrderId);
@@ -61,7 +63,9 @@ public class OrderRepository {
     public OrderDetailsResponse findByBrokerOrderId(String brokerCode, long brokerOrderId) {
         List<OrderDetailsResponse> orders = jdbcTemplate.query("""
                 SELECT id, user_id, broker_code, broker_order_id, stock_code,
-                       side, price, quantity, status, created_at
+                       side, price, quantity, quantity - COALESCE((SELECT SUM(t.quantity) FROM trade t
+                           WHERE t.buy_order_id = exchange_order.id OR t.sell_order_id = exchange_order.id), 0)
+                           AS remaining_quantity, status, created_at
                 FROM exchange_order
                 WHERE broker_code = ? AND broker_order_id = ?
                 """, (resultSet, rowNumber) -> mapOrder(resultSet), brokerCode, brokerOrderId);
@@ -72,7 +76,9 @@ public class OrderRepository {
     public List<OrderDetailsResponse> findWaitingOrders() {
         return jdbcTemplate.query("""
                 SELECT id, user_id, broker_code, broker_order_id, stock_code,
-                       side, price, quantity, status, created_at
+                       side, price, quantity, quantity - COALESCE((SELECT SUM(t.quantity) FROM trade t
+                           WHERE t.buy_order_id = exchange_order.id OR t.sell_order_id = exchange_order.id), 0)
+                           AS remaining_quantity, status, created_at
                 FROM exchange_order
                 WHERE status = 'WAITING'
                 ORDER BY created_at, id
@@ -82,7 +88,9 @@ public class OrderRepository {
     public List<OrderDetailsResponse> findRecentOrders() {
         return jdbcTemplate.query("""
                 SELECT id, user_id, broker_code, broker_order_id, stock_code,
-                       side, price, quantity, status, created_at
+                       side, price, quantity, quantity - COALESCE((SELECT SUM(t.quantity) FROM trade t
+                           WHERE t.buy_order_id = exchange_order.id OR t.sell_order_id = exchange_order.id), 0)
+                           AS remaining_quantity, status, created_at
                 FROM exchange_order
                 ORDER BY created_at DESC, id DESC
                 LIMIT 100
@@ -94,7 +102,9 @@ public class OrderRepository {
         long higherOrderId = Math.max(firstOrderId, secondOrderId);
         return jdbcTemplate.query("""
                 SELECT id, user_id, broker_code, broker_order_id, stock_code,
-                       side, price, quantity, status, created_at
+                       side, price, quantity, quantity - COALESCE((SELECT SUM(t.quantity) FROM trade t
+                           WHERE t.buy_order_id = exchange_order.id OR t.sell_order_id = exchange_order.id), 0)
+                           AS remaining_quantity, status, created_at
                 FROM exchange_order
                 WHERE id IN (?, ?) AND status = 'WAITING'
                 ORDER BY id
@@ -102,12 +112,15 @@ public class OrderRepository {
                 """, (resultSet, rowNumber) -> mapOrder(resultSet), lowerOrderId, higherOrderId);
     }
 
-    public int markMatchedIfWaiting(long firstOrderId, long secondOrderId) {
+    public int markMatchedIfFilled(long orderId) {
         return jdbcTemplate.update("""
                 UPDATE exchange_order
                 SET status = 'MATCHED'
-                WHERE id IN (?, ?) AND status = 'WAITING'
-                """, firstOrderId, secondOrderId);
+                WHERE id = ? AND status = 'WAITING' AND quantity <= (
+                    SELECT COALESCE(SUM(t.quantity), 0) FROM trade t
+                    WHERE t.buy_order_id = exchange_order.id OR t.sell_order_id = exchange_order.id
+                )
+                """, orderId);
     }
 
     private OrderDetailsResponse mapOrder(ResultSet resultSet) throws SQLException {
@@ -121,6 +134,7 @@ public class OrderRepository {
                 resultSet.getString("side"),
                 resultSet.getLong("price"),
                 resultSet.getInt("quantity"),
+                resultSet.getInt("remaining_quantity"),
                 status,
                 "MATCHED".equals(status),
                 resultSet.getTimestamp("created_at").toLocalDateTime()

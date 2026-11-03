@@ -59,11 +59,31 @@ class MatchingCandidateServiceTest {
 				);
 	}
 
+	@Test
+	void keepsTheLargerOrderForAnotherPartialFill() {
+		when(orderRepository.findWaitingOrders()).thenReturn(List.of(
+				order(1, "A", 101, "BUY", 70_000, 10, LocalDateTime.of(2026, 1, 1, 9, 0)),
+				order(2, "B", 201, "SELL", 69_000, 4, LocalDateTime.of(2026, 1, 1, 9, 1)),
+				order(3, "B", 202, "SELL", 70_000, 6, LocalDateTime.of(2026, 1, 1, 9, 2))
+		));
+
+		assertThat(service.findMatchCandidates())
+				.containsExactly(
+						new MatchResult(1, 2, java.math.BigDecimal.valueOf(70_000), 4),
+						new MatchResult(1, 3, java.math.BigDecimal.valueOf(70_000), 6)
+				);
+	}
+
 	private OrderDetailsResponse order(long id, String brokerCode, long brokerOrderId,
 			String side, long price, LocalDateTime createdAt) {
+		return order(id, brokerCode, brokerOrderId, side, price, 10, createdAt);
+	}
+
+	private OrderDetailsResponse order(long id, String brokerCode, long brokerOrderId,
+			String side, long price, int quantity, LocalDateTime createdAt) {
 		return new OrderDetailsResponse(
 				id, 1L, brokerCode, brokerOrderId, "005930", side,
-				price, 10, "WAITING", false, createdAt
+				price, quantity, "WAITING", false, createdAt
 		);
 	}
 }

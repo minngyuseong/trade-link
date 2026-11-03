@@ -52,13 +52,12 @@ class MatchingEngineTest {
 	}
 
 	@Test
-	void onlyOrdersWithExactlySameQuantityCanMatch() {
+	void differentQuantitiesPartiallyFillTheSmallerOrder() {
 		MatchingOrder incomingBuy = order(100, OrderSide.BUY, "72000", 10, "10:00:03Z");
-		MatchingOrder cheaperWrongQuantity = order(1, OrderSide.SELL, "69000", 5, "10:00:01Z");
-		MatchingOrder sameQuantity = order(2, OrderSide.SELL, "70000", 10, "10:00:02Z");
+		MatchingOrder smallerSell = order(1, OrderSide.SELL, "69000", 5, "10:00:01Z");
 
-		assertThat(matchingEngine.match(incomingBuy, List.of(cheaperWrongQuantity, sameQuantity)))
-				.contains(new MatchResult(100, 2, new BigDecimal("70000"), 10));
+		assertThat(matchingEngine.match(incomingBuy, List.of(smallerSell)))
+				.contains(new MatchResult(100, 1, new BigDecimal("69000"), 5));
 	}
 
 	@Test

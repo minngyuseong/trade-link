@@ -44,8 +44,8 @@ public class MatchingCandidateService {
 				if (result.isPresent()) {
 					MatchResult candidate = result.orElseThrow();
 					candidates.add(candidate);
-					remainingOrders.removeIf(order -> order.exchangeOrderId() == candidate.buyOrderId()
-							|| order.exchangeOrderId() == candidate.sellOrderId());
+					applyFill(remainingOrders, candidate.buyOrderId(), candidate.quantity());
+					applyFill(remainingOrders, candidate.sellOrderId(), candidate.quantity());
 					foundCandidate = true;
 					break;
 				}
@@ -55,13 +55,28 @@ public class MatchingCandidateService {
 		return List.copyOf(candidates);
 	}
 
+	private void applyFill(List<MatchingOrder> orders, long orderId, long filledQuantity) {
+		for (int index = 0; index < orders.size(); index++) {
+			MatchingOrder order = orders.get(index);
+			if (order.exchangeOrderId() != orderId) continue;
+			long remaining = order.quantity() - filledQuantity;
+			if (remaining == 0) {
+				orders.remove(index);
+			} else {
+				orders.set(index, new MatchingOrder(order.exchangeOrderId(), order.stockCode(),
+						order.side(), order.price(), remaining, order.receivedAt()));
+			}
+			return;
+		}
+	}
+
 	private MatchingOrder toMatchingOrder(OrderDetailsResponse order) {
 		return new MatchingOrder(
 				order.exchangeOrderId(),
 				order.stockCode(),
 				OrderSide.valueOf(order.side()),
 				BigDecimal.valueOf(order.price()),
-				order.quantity(),
+				order.remainingQuantity(),
 				order.createdAt().atZone(DATABASE_ZONE).toInstant()
 		);
 	}

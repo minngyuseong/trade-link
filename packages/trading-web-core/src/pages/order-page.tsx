@@ -20,6 +20,7 @@ const formatWon = (value: number) => `${formatNumber(value)}원`
 const statusLabel: Record<OrderStatus, string> = {
   PENDING: '접수 대기',
   ACCEPTED: '주문 접수',
+  PARTIAL: '부분 체결',
   MATCHED: '체결',
   SETTLED: '정산 완료',
 }
@@ -27,19 +28,20 @@ const statusLabel: Record<OrderStatus, string> = {
 const statusClass: Record<OrderStatus, string> = {
   PENDING: 'bg-slate-100 text-slate-600',
   ACCEPTED: 'bg-amber-50 text-amber-700',
+  PARTIAL: 'bg-sky-50 text-sky-700',
   MATCHED: 'bg-violet-50 text-violet-700',
   SETTLED: 'bg-emerald-50 text-emerald-700',
 }
 
 const delay = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 
-async function waitForSettlement(orderId: number) {
+async function trackOrder(orderId: number, onUpdate: (order: OrderResult) => void) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const order = await tradingApi.getOrder(orderId)
-    if (order.status === 'SETTLED') return order
+    onUpdate(order)
+    if (order.status === 'SETTLED') return
     await delay(500)
   }
-  throw new Error('주문이 60초 안에 정산되지 않았습니다.')
 }
 
 export function OrderPage() {
@@ -61,6 +63,7 @@ export function OrderPage() {
   })
   const [tab, setTab] = useState<DetailTab>('order')
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('ALL')
+  const [lastAcceptedOrder, setLastAcceptedOrder] = useState<OrderResult | null>(null)
   const [quantityText, setQuantityText] = useState('')
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
 
@@ -76,32 +79,40 @@ export function OrderPage() {
   )
 
   const orderMutation = useMutation({
-    mutationFn: async (side: OrderSide) => {
-      const accepted = await tradingApi.placeOrder({
+    mutationFn: (side: OrderSide) =>
+      tradingApi.placeOrder({
         stockCode: stock.code,
         side,
         quantity,
         price: stock.price,
         userId: brand.userId,
         idempotencyKey,
-      })
-      return waitForSettlement(accepted.id)
-    },
-    onSuccess: async (settledOrder) => {
+      }),
+    onSuccess: (acceptedOrder) => {
+      setLastAcceptedOrder(acceptedOrder)
+      setQuantityText('')
+      setIdempotencyKey(crypto.randomUUID())
       queryClient.setQueryData<OrderResult[]>(['orders'], (current = []) => [
-        settledOrder,
-        ...current.filter((order) => order.id !== settledOrder.id),
+        acceptedOrder,
+        ...current.filter((order) => order.id !== acceptedOrder.id),
       ])
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['account'] }),
-        queryClient.invalidateQueries({ queryKey: ['holding', stock.code] }),
-        queryClient.invalidateQueries({ queryKey: ['orders'] }),
-      ])
+      void trackOrder(acceptedOrder.id, (updatedOrder) => {
+        queryClient.setQueryData<OrderResult[]>(['orders'], (current = []) => [
+          updatedOrder,
+          ...current.filter((order) => order.id !== updatedOrder.id),
+        ])
+        if (updatedOrder.status === 'SETTLED') {
+          void queryClient.invalidateQueries({ queryKey: ['account'] })
+          void queryClient.invalidateQueries({ queryKey: ['holding', stock.code] })
+        }
+      }).catch(() => {
+        void queryClient.invalidateQueries({ queryKey: ['orders'] })
+      })
     },
   })
 
   const resetOrderAttempt = () => {
-    if (orderMutation.isSuccess || orderMutation.isError) {
+    if (orderMutation.isError) {
       orderMutation.reset()
       setIdempotencyKey(crypto.randomUUID())
     }
@@ -190,12 +201,12 @@ export function OrderPage() {
           </div>
         </section>
 
-        {orderMutation.isSuccess && (
+        {lastAcceptedOrder && (
           <div className="mt-4 flex gap-3 rounded-2xl bg-emerald-50 p-4 text-emerald-800" role="status">
             <CheckCircle2 className="mt-0.5 size-5 shrink-0" />
             <div>
-              <p className="font-bold">주문 체결과 정산이 완료됐어요</p>
-              <p className="mt-1 text-sm">주문번호 {orderMutation.data.orderId}</p>
+              <p className="font-bold">주문이 접수됐어요. 바로 다음 주문을 넣을 수 있어요.</p>
+              <p className="mt-1 text-sm">주문번호 {lastAcceptedOrder.orderId} · 체결 상태는 내 주식에서 확인하세요.</p>
             </div>
           </div>
         )}
@@ -244,14 +255,14 @@ export function OrderPage() {
       <div className="fixed inset-x-0 bottom-0 z-20 mx-auto grid w-full max-w-[520px] grid-cols-2 gap-3 border-t border-slate-100 bg-white/95 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
         <Button
           className="h-16 rounded-2xl bg-blue-600 text-lg font-bold text-white shadow-lg shadow-blue-600/15 hover:bg-blue-600 hover:brightness-95"
-          disabled={!canSell || orderMutation.isPending || orderMutation.isSuccess}
+          disabled={!canSell || orderMutation.isPending}
           onClick={() => orderMutation.mutate('SELL')}
         >
           {orderMutation.isPending && orderMutation.variables === 'SELL' ? '판매 처리 중...' : '판매하기'}
         </Button>
         <Button
           className="h-16 rounded-2xl bg-red-500 text-lg font-bold text-white shadow-lg shadow-red-500/15 hover:bg-red-500 hover:brightness-95"
-          disabled={!canBuy || orderMutation.isPending || orderMutation.isSuccess}
+          disabled={!canBuy || orderMutation.isPending}
           onClick={() => orderMutation.mutate('BUY')}
         >
           {orderMutation.isPending && orderMutation.variables === 'BUY' ? '구매 처리 중...' : '구매하기'}

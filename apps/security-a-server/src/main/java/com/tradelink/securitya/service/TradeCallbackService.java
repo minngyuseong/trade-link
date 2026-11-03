@@ -50,10 +50,21 @@ public class TradeCallbackService {
     // 3번 API: 거래소 체결 통보 처리
     @Transactional
     public void onTrade(TradeNotice n) {
+        int inserted = jdbc.sql("""
+                INSERT IGNORE INTO order_trade(order_id, trade_id, price, quantity)
+                VALUES (:id, :t, :p, :q)
+                """)
+                .param("id", n.brokerOrderId()).param("t", n.tradeId())
+                .param("p", n.price()).param("q", n.quantity()).update();
+        if (inserted == 0) return;
+
         int updated = jdbc.sql("""
-                UPDATE orders 
-                SET status = 'MATCHED', trade_id = :t 
-                WHERE id = :id AND status IN ('PENDING', 'ACCEPTED')
+                UPDATE orders o
+                SET status = CASE WHEN (
+                    SELECT COALESCE(SUM(ot.quantity), 0) FROM order_trade ot WHERE ot.order_id = o.id
+                ) >= o.quantity THEN 'MATCHED' ELSE 'PARTIAL' END,
+                trade_id = :t
+                WHERE o.id = :id AND o.status <> 'SETTLED'
                 """)
                 .param("t", n.tradeId())
                 .param("id", n.brokerOrderId())
@@ -71,13 +82,16 @@ public class TradeCallbackService {
     public void onSettlement(SettlementNotice n) {
         if (!"SETTLED".equals(n.status())) return;
 
-        int changed = jdbc.sql("UPDATE orders SET status = 'SETTLED' WHERE id = :id AND status = 'MATCHED'")
-                .param("id", n.brokerOrderId()).update();
-        if (changed == 0) return;
+        int inserted = jdbc.sql("""
+                INSERT IGNORE INTO order_settlement(order_id, trade_id, price, quantity)
+                VALUES (:id, :t, :p, :q)
+                """)
+                .param("id", n.brokerOrderId()).param("t", n.tradeId())
+                .param("p", n.price()).param("q", n.quantity()).update();
+        if (inserted == 0) return;
 
-        // DB에서 원본 주문 내역 조회
         OrderResponse o = findById(n.brokerOrderId());
-        long amount = o.price() * o.quantity();
+        long amount = n.price() * n.quantity();
 
         if ("BUY".equalsIgnoreCase(o.side())) {
             // 매수: 예수금 차감, 보유주식 증가
@@ -87,14 +101,23 @@ public class TradeCallbackService {
                     INSERT INTO holdings(account_no, stock_code, quantity) VALUES (:no, :c, :q)
                     ON DUPLICATE KEY UPDATE quantity = quantity + :q
                     """)
-                    .param("no", o.accountNo()).param("c", o.stockCode()).param("q", o.quantity()).update();
+                    .param("no", o.accountNo()).param("c", o.stockCode()).param("q", n.quantity()).update();
         } else {
             // 매도: 예수금 증가, 보유주식 차감
             jdbc.sql("UPDATE accounts SET cash = cash + :a WHERE account_no = :no")
                     .param("a", amount).param("no", o.accountNo()).update();
             jdbc.sql("UPDATE holdings SET quantity = quantity - :q WHERE account_no = :no AND stock_code = :c")
-                    .param("q", o.quantity()).param("no", o.accountNo()).param("c", o.stockCode()).update();
+                    .param("q", n.quantity()).param("no", o.accountNo()).param("c", o.stockCode()).update();
         }
+
+        jdbc.sql("""
+                UPDATE orders o
+                SET status = CASE WHEN (
+                    SELECT COALESCE(SUM(os.quantity), 0) FROM order_settlement os WHERE os.order_id = o.id
+                ) >= o.quantity THEN 'SETTLED' ELSE 'PARTIAL' END,
+                trade_id = :t
+                WHERE o.id = :id
+                """).param("t", n.tradeId()).param("id", n.brokerOrderId()).update();
 
         System.out.println("🎉 [4번 정산 완료] 주문 #" + o.id() + " -> SETTLED 및 계좌/보유주식 반영 완료");
     }

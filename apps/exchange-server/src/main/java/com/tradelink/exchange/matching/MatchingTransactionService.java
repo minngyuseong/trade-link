@@ -57,11 +57,8 @@ public class MatchingTransactionService {
 		}
 
 		long tradeId = tradeRepository.insert(lockedMatch, buyOrder.stockCode());
-		int updatedOrders = orderRepository.markMatchedIfWaiting(
-				lockedMatch.buyOrderId(), lockedMatch.sellOrderId());
-		if (updatedOrders != 2) {
-			throw new IllegalStateException("Expected two WAITING orders to become MATCHED");
-		}
+		orderRepository.markMatchedIfFilled(lockedMatch.buyOrderId());
+		orderRepository.markMatchedIfFilled(lockedMatch.sellOrderId());
 
 		eventPublisher.publishEvent(new TradeMatchedEvent(
 				tradeId,
@@ -102,7 +99,7 @@ public class MatchingTransactionService {
 				order.stockCode(),
 				OrderSide.valueOf(order.side()),
 				BigDecimal.valueOf(order.price()),
-				order.quantity(),
+				order.remainingQuantity(),
 				order.createdAt().atZone(DATABASE_ZONE).toInstant()
 		);
 	}

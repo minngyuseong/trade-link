@@ -122,8 +122,8 @@ class MySqlMatchingTransactionIntegrationTest {
 		try {
 			assertThatThrownBy(() -> requiresNew.executeWithoutResult(status -> {
 				tradeRepository.insert(candidate(orders), "005930");
-				assertThat(orderRepository.markMatchedIfWaiting(
-						orders.buyOrderId(), orders.sellOrderId())).isEqualTo(2);
+				assertThat(orderRepository.markMatchedIfFilled(orders.buyOrderId())).isEqualTo(1);
+				assertThat(orderRepository.markMatchedIfFilled(orders.sellOrderId())).isEqualTo(1);
 				throw new ForcedRollbackException();
 			})).isInstanceOf(ForcedRollbackException.class);
 

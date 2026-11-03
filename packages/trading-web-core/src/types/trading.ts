@@ -16,7 +16,7 @@ export type PlaceOrderRequest = {
   idempotencyKey: string
 }
 
-export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'MATCHED' | 'SETTLED'
+export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'PARTIAL' | 'MATCHED' | 'SETTLED'
 
 export type OrderResult = {
   id: number
